@@ -52,6 +52,7 @@ var common = map[int]string{
 	989:  "ftps",
 	990:  "ftps",
 	1194: "openvpn",
+	3000: "node",
 	3306: "mysql",
 	5000: "unpn",
 	8080: "https-proxy",

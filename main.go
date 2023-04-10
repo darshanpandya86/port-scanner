@@ -2,13 +2,15 @@ package main
 
 import (
 	"fmt"
+	"port-scanner/port"
 	"time"
-
-	"github.com/port-scanner/port"
 )
 
 func main() {
 	start := time.Now()
+
+	port.GetOpenPorts("127.0.0.1", port.PortRange{Start: 2999, End: 3999})
+
 	port.GetOpenPorts("www.freecodecamp.com", port.PortRange{Start: 75, End: 85})
 
 	// called with ip address
