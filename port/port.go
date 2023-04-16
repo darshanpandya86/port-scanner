@@ -1,7 +1,6 @@
 package port
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -9,9 +8,9 @@ import (
 )
 
 type PortResult struct {
-	Port    int
-	State   bool
-	Service string
+	Port    int    `json:"Port"`
+	State   bool   `json:"state"`
+	Service string `json:"service"`
 }
 
 type PortRange struct {
@@ -19,9 +18,11 @@ type PortRange struct {
 }
 
 type ScanResult struct {
-	hostname string
-	ip       []net.IP
-	results  []PortResult
+	Hostname string `json:"hostname"`
+
+	Ip []net.IP `json:"ip"`
+
+	Results []PortResult `json:"results"`
 }
 
 var common = map[int]string{
@@ -100,28 +101,14 @@ func ScanPorts(hostname string, ports PortRange) (ScanResult, error) {
 	}
 
 	scanned = ScanResult{
-		hostname: hostname,
-		ip:       addr,
-		results:  results,
+		Hostname: hostname,
+		Ip:       addr,
+		Results:  results,
 	}
 	return scanned, nil
 }
 
-func DisplayScanResult(result ScanResult) {
-	ip := result.ip[len(result.ip)-1]
-	fmt.Printf("Open ports for %s (%s)\n", result.hostname, ip.String())
-	for _, v := range result.results {
-		if v.State {
-			fmt.Printf("%d	%s\n", v.Port, v.Service)
-		}
-	}
-}
-
-func GetOpenPorts(hostname string, ports PortRange) {
-	scanned, err := ScanPorts(hostname, ports)
-	if err != nil {
-		fmt.Println(err)
-	} else {
-		DisplayScanResult(scanned)
-	}
+func GetOpenPorts(hostname string, ports PortRange) ScanResult {
+	scanned, _ := ScanPorts(hostname, ports)
+	return scanned
 }
