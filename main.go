@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"port-scanner/port"
+	"strconv"
 
+	"github.com/Ullaakut/nmap/v3"
 	"github.com/gorilla/mux"
 )
 
@@ -16,25 +18,18 @@ type ErrorResponse struct {
 	Message string
 }
 type PortScanRequest struct {
-	HostName string `json:"hostname"`
+	HostName []string `json:"hostname"`
 }
+type Result struct {
+	HostName  string  `json:"hostname"`
+	ListPorts []Ports `json:"Ports"`
+}
+type Ports struct {
+	ID       string `json:"id"`
+	Protocol string `json:"protocol"`
 
-func returnLastPortScan(response http.ResponseWriter, request *http.Request) {
-	var httpError = ErrorResponse{
-		Code: http.StatusInternalServerError, Message: "It's not you it's me.",
-	}
-	fmt.Println("Endpoint Hit: return port scan")
-	result := port.GetOpenPorts("www.freecodecamp.com", port.PortRange{Start: 75, End: 85})
-
-	//json.NewEncoder(w).Encode(DisplayScanResult(result))
-	jsonResponse, _ := json.Marshal(result)
-	if jsonResponse == nil {
-		returnErrorResponse(response, request, httpError)
-	} else {
-		response.Header().Set("Content-Type", "application/json")
-		response.Write(jsonResponse)
-	}
-	response.Write(jsonResponse)
+	Service string `xml:"service" json:"service"`
+	State   string `xml:"state" json:"state"`
 }
 
 func startPortScan(response http.ResponseWriter, request *http.Request) {
@@ -42,14 +37,13 @@ func startPortScan(response http.ResponseWriter, request *http.Request) {
 		Code: http.StatusInternalServerError, Message: "It's not you it's me.",
 	}
 	reqBody, _ := ioutil.ReadAll(request.Body)
-	var data = make([]PortScanRequest)
+	var data = PortScanRequest{}
 	json.Unmarshal(reqBody, &data)
-	fmt.Println(data)
-	result := []port.ScanResult{}
-	for _, v := range data {
-		result = append(result, port.GetOpenPorts(v.HostName, port.PortRange{Start: 75, End: 85}))
-	}
-	jsonResponse, _ := json.Marshal(result)
+	//fmt.Println(data)
+
+	r := nmapProcessor(data.HostName)
+
+	jsonResponse, _ := json.Marshal(r)
 	if jsonResponse == nil {
 		returnErrorResponse(response, request, httpError)
 	} else {
@@ -79,14 +73,11 @@ func addApproutes(route *mux.Router) {
 
 	setStaticFolder(route)
 
-	route.HandleFunc("/", returnLastPortScan)
-
-	route.HandleFunc("/scan", returnLastPortScan).Methods("GET")
+	route.HandleFunc("/scan", startPortScan).Methods("GET")
 	route.HandleFunc("/scan", startPortScan).Methods("POST")
 
 	fmt.Println("Routes are Loded.")
 }
-
 func main() {
 	fmt.Println("Server will start at http://localhost:8000/")
 	//start := time.Now()
@@ -112,4 +103,58 @@ func main() {
 	addApproutes(route)
 
 	log.Fatal(http.ListenAndServe(":8000", route))
+}
+
+func nmapProcessor(input []string) []Result {
+	// Equivalent to `/usr/local/bin/nmap -p 80,443,843 google.com facebook.com youtube.com`,
+	// with a 5-minute timeout.
+	s, err := nmap.NewScanner(
+		context.Background(),
+		nmap.WithTargets(input...),
+		nmap.WithPorts("80,443,843"),
+	)
+	if err != nil {
+		log.Fatalf("unable to create nmap scanner: %v", err)
+	}
+
+	// Executes asynchronously, allowing results to be streamed in real time.
+	done := make(chan error)
+	result, warnings, err := s.Async(done).Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Blocks main until the scan has completed.
+	if err := <-done; err != nil {
+		if len(*warnings) > 0 {
+			log.Printf("run finished with warnings: %s\n", *warnings) // Warnings are non-critical errors from nmap.
+		}
+		log.Fatal(err)
+	}
+	var res []Result
+
+	// Use the results to print an example output
+	for _, host := range result.Hosts {
+		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
+			continue
+		}
+		var r Result
+		fmt.Printf("Host %q:\n", host.Addresses[0])
+
+		r.HostName = host.Addresses[0].Addr
+
+		for _, port := range host.Ports {
+			var p Ports
+			p.ID = strconv.FormatUint(uint64(port.ID), 10)
+			p.Protocol = port.Protocol
+			p.State = port.State.String()
+			p.Service = port.Service.Name
+			r.ListPorts = append(r.ListPorts, p)
+
+			//fmt.Printf("\tPort %d/%s %s %s\n", p.ID, r.Protocol, r.State, r.Service)
+		}
+		res = append(res, r)
+	}
+
+	return res
 }
